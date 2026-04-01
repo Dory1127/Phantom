@@ -1,11 +1,11 @@
 /* ═══════════════════════════════════════════════
-   FloatDrive — app.js
-   Communicates with Express API at /api/*
+   Phantom — app.js
+   Auth: userID / name / password (no email)
 ═══════════════════════════════════════════════ */
 
-const API = '';  // 같은 origin이므로 빈 문자열 (상대경로)
+const API = '';
 
-/* ─── Folder SVG templates ─────────────────── */
+/* ─── Folder SVG ─────────────────────────────── */
 const FOLDER_COLORS = ['blue','green','yellow','pink','purple','orange'];
 
 function folderSVG(color) {
@@ -28,45 +28,60 @@ function folderSVG(color) {
   </svg>`;
 }
 
-function folderEmoji(color) {
-  const map = { blue:'🔵', green:'🟢', yellow:'🟡', pink:'🩷', purple:'🟣', orange:'🟠' };
-  return map[color] || '📁';
+/* ─── Validation helpers ─────────────────────── */
+const USERID_RE = /^[a-zA-Z0-9_]+$/;
+
+function validateUserID(val) {
+  if (!val) return { ok: false, msg: '' };
+  if (val.length < 3) return { ok: false, msg: '3자 이상 입력하세요' };
+  if (val.length > 30) return { ok: false, msg: '30자 이하로 입력하세요' };
+  if (!USERID_RE.test(val)) return { ok: false, msg: '영문, 숫자, 언더스코어(_)만 사용 가능해요' };
+  return { ok: true, msg: '사용 가능한 아이디예요' };
 }
 
 /* ─── State ─────────────────────────────────── */
 const State = {
-  token: localStorage.getItem('fd_token') || null,
-  user:  JSON.parse(localStorage.getItem('fd_user') || 'null'),
-  files: [],
-  dragging: null,
-  dragOffX: 0, dragOffY: 0,
+  token:  localStorage.getItem('ph_token') || null,
+  user:   JSON.parse(localStorage.getItem('ph_user') || 'null'),
+  files:  [],
+  dragging: null, dragOffX: 0, dragOffY: 0,
   pendingVerifyFile: null,
   infoFile: null,
 };
 
-/* ─── API helpers ────────────────────────────── */
+/* ─── API fetch ──────────────────────────────── */
 async function apiFetch(path, options = {}) {
   const headers = { 'Content-Type': 'application/json' };
   if (State.token) headers['Authorization'] = `Bearer ${State.token}`;
-  const res = await fetch(API + path, { ...options, headers: { ...headers, ...(options.headers||{}) } });
+  const res = await fetch(API + path, {
+    ...options,
+    headers: { ...headers, ...(options.headers || {}) }
+  });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || '요청 실패');
   return data;
 }
 
-/* ─── Toast ─────────────────────────────────── */
-let toastTimer;
+/* ─── Toast ──────────────────────────────────── */
+let _toastTimer;
 function showToast(msg, type = '') {
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.className = `toast ${type}`;
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.add('hidden'), 2800);
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => t.classList.add('hidden'), 2800);
 }
 
 /* ─── Modal helpers ──────────────────────────── */
 function openOverlay(id)  { document.getElementById(id + 'Overlay').classList.remove('hidden'); }
 function closeOverlay(id) { document.getElementById(id + 'Overlay').classList.add('hidden'); }
+
+function clearModalErrors() {
+  ['login','register','create','verify'].forEach(n => {
+    const el = document.getElementById(n + 'Error');
+    if (el) el.classList.add('hidden');
+  });
+}
 
 /* ─── File counter ───────────────────────────── */
 function updateCounter(n) {
@@ -74,15 +89,18 @@ function updateCounter(n) {
     n === 0 ? '— files floating' : `${n} file${n === 1 ? '' : 's'} floating`;
 }
 
-/* ─── Auth UI ────────────────────────────────── */
+/* ─── Auth UI sync ───────────────────────────── */
 function syncAuthUI() {
   const loggedIn = !!State.token;
   document.getElementById('guestActions').classList.toggle('hidden', loggedIn);
   document.getElementById('userActions').classList.toggle('hidden', !loggedIn);
+
   if (loggedIn && State.user) {
-    document.getElementById('userAvatar').textContent = State.user.username[0].toUpperCase();
-    document.getElementById('menuName').textContent = State.user.username;
-    document.getElementById('emptySub').textContent = '+ 새 파일 버튼으로 파일을 만들어보세요';
+    const initial = (State.user.name || State.user.userID)[0].toUpperCase();
+    document.getElementById('userAvatar').textContent = initial;
+    document.getElementById('menuUserID').textContent = '@' + State.user.userID;
+    document.getElementById('menuName').textContent   = State.user.name;
+    document.getElementById('emptySub').textContent   = '+ 새 파일 버튼으로 파일을 만들어보세요';
   } else {
     document.getElementById('emptySub').textContent = '로그인하고 첫 파일을 올려보세요';
   }
@@ -94,19 +112,16 @@ function initDrag(el, fileId) {
 
   el.addEventListener('mousedown', e => {
     if (e.button !== 0) return;
-    if (e.target.closest('.file-card-inner') === null) return;
-
+    if (!e.target.closest('.file-card-inner')) return;
     e.preventDefault();
-    State.dragging = { el, fileId };
 
+    State.dragging = { el, fileId };
     const rect = el.getBoundingClientRect();
-    const canvasRect = canvas.getBoundingClientRect();
     State.dragOffX = e.clientX - rect.left;
     State.dragOffY = e.clientY - rect.top;
 
     el.classList.remove('is-floating');
     el.style.zIndex = 50;
-    el.style.transition = 'box-shadow 0.2s';
     el.querySelector('.file-card-inner').style.boxShadow = '0 20px 60px rgba(0,0,0,0.5)';
   });
 
@@ -117,7 +132,7 @@ function initDrag(el, fileId) {
       State.pendingVerifyFile = file;
       document.getElementById('verifyFileName').textContent = `"${file.name}" 파일은 보호되어 있어요`;
       document.getElementById('verifyPw').value = '';
-      App.closeModal('verify'); // reset
+      document.getElementById('verifyError').classList.add('hidden');
       openOverlay('verify');
     } else {
       App.openInfo(file);
@@ -129,15 +144,9 @@ document.addEventListener('mousemove', e => {
   if (!State.dragging) return;
   const { el } = State.dragging;
   const canvas = document.getElementById('canvas');
-  const canvasRect = canvas.getBoundingClientRect();
-
-  let x = e.clientX - canvasRect.left - State.dragOffX;
-  let y = e.clientY - canvasRect.top  - State.dragOffY;
-
-  // Clamp within canvas
-  x = Math.max(0, Math.min(x, canvasRect.width  - 110));
-  y = Math.max(0, Math.min(y, canvasRect.height - 140));
-
+  const cr = canvas.getBoundingClientRect();
+  let x = Math.max(0, Math.min(e.clientX - cr.left - State.dragOffX, cr.width  - 110));
+  let y = Math.max(0, Math.min(e.clientY - cr.top  - State.dragOffY, cr.height - 150));
   el.style.left = x + 'px';
   el.style.top  = y + 'px';
 });
@@ -145,70 +154,57 @@ document.addEventListener('mousemove', e => {
 document.addEventListener('mouseup', async () => {
   if (!State.dragging) return;
   const { el, fileId } = State.dragging;
-
   el.style.zIndex = 10;
   el.querySelector('.file-card-inner').style.boxShadow = '';
-
-  // Restart float animation
   setTimeout(() => el.classList.add('is-floating'), 100);
 
   const x = parseFloat(el.style.left);
   const y = parseFloat(el.style.top);
 
-  // Save position to DB if logged in
   if (State.token) {
     try {
       await apiFetch(`/api/files/${fileId}/position`, {
-        method: 'PATCH',
-        body: JSON.stringify({ pos_x: x, pos_y: y })
+        method: 'PATCH', body: JSON.stringify({ pos_x: x, pos_y: y })
       });
-      // Update local state
       const f = State.files.find(f => f.id === fileId);
       if (f) { f.pos_x = x; f.pos_y = y; }
     } catch (_) {}
   }
-
   State.dragging = null;
 });
 
 /* ─── Render Files ───────────────────────────── */
 function renderFiles(files) {
   const canvas = document.getElementById('canvas');
-  // Remove existing cards
   canvas.querySelectorAll('.file-card').forEach(c => c.remove());
 
-  const empty = document.getElementById('emptyState');
-  empty.classList.toggle('hidden', files.length > 0);
+  document.getElementById('emptyState').classList.toggle('hidden', files.length > 0);
   updateCounter(files.length);
 
   const W = canvas.clientWidth;
   const H = canvas.clientHeight;
 
   files.forEach((file, i) => {
-    const colorIndex = file.name.charCodeAt(0) % FOLDER_COLORS.length;
-    const color = FOLDER_COLORS[colorIndex];
-    const tilt = ((file.name.charCodeAt(0) % 7) - 3) * 0.8; // -2.4 to 2.4 deg
+    const colorIdx = file.name.charCodeAt(0) % FOLDER_COLORS.length;
+    const color    = FOLDER_COLORS[colorIdx];
+    const tilt     = ((file.name.charCodeAt(0) % 7) - 3) * 0.8;
     const floatDur = 5 + (i % 4);
-    const floatDelay = -(i * 1.1);
+    const floatDly = -(i * 1.1);
 
-    // Position: use saved position, else random
     let x = file.pos_x ?? (40 + Math.random() * (W - 160));
     let y = file.pos_y ?? (20 + Math.random() * (H - 180));
-
-    // Keep within bounds
     x = Math.max(0, Math.min(x, W - 120));
     y = Math.max(0, Math.min(y, H - 150));
 
     const card = document.createElement('div');
     card.className = 'file-card is-floating';
     card.style.cssText = `
-      left: ${x}px; top: ${y}px;
-      --tilt: ${tilt}deg;
-      --float-dur: ${floatDur}s;
-      --float-delay: ${floatDelay}s;
-      animation-delay: ${floatDelay}s;
+      left:${x}px; top:${y}px;
+      --tilt:${tilt}deg;
+      --float-dur:${floatDur}s;
+      --float-delay:${floatDly}s;
+      animation-delay:${floatDly}s;
     `;
-
     card.innerHTML = `
       <div class="file-card-inner">
         ${file.is_password_protected ? `
@@ -219,26 +215,25 @@ function renderFiles(files) {
           </svg>
         </div>` : ''}
         <div class="folder-icon">${folderSVG(color)}</div>
-        <div class="file-name" title="${escHtml(file.name)}">${escHtml(file.name)}</div>
-        <div class="owner-tag">${escHtml(file.username || '')}</div>
-      </div>
-    `;
-
+        <div class="file-name" title="${esc(file.name)}">${esc(file.name)}</div>
+        <div class="owner-tag">${esc(file.username || '')}</div>
+      </div>`;
     canvas.appendChild(card);
     initDrag(card, file.id);
   });
 }
 
-function escHtml(str) {
-  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+function esc(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-/* ─── Load Files ─────────────────────────────── */
+/* ─── Load files ─────────────────────────────── */
 async function loadFiles() {
   try {
-    const files = await apiFetch('/api/files');
-    State.files = files;
-    renderFiles(files);
+    State.files = await apiFetch('/api/files');
+    renderFiles(State.files);
   } catch (e) {
     showToast('파일 로드 실패', 'error');
   }
@@ -251,57 +246,73 @@ const App = {
 
   /* ── Modals ───────────────────────── */
   openModal(name) {
-    // Clear errors
-    ['login','register','create','verify'].forEach(n => {
-      const el = document.getElementById(n + 'Error');
-      if (el) el.classList.add('hidden');
-    });
+    clearModalErrors();
     openOverlay(name);
-    // Auto-focus first input
-    const input = document.querySelector(`#${name}Overlay input`);
-    if (input) setTimeout(() => input.focus(), 80);
+    setTimeout(() => {
+      const input = document.querySelector(`#${name}Overlay input`);
+      if (input) input.focus();
+    }, 80);
   },
-
-  closeModal(name) {
-    closeOverlay(name);
-  },
-
+  closeModal(name) { closeOverlay(name); },
   switchModal(from, to) {
     closeOverlay(from);
     setTimeout(() => App.openModal(to), 80);
   },
-
   toggleUserMenu() {
     document.getElementById('userMenu').classList.toggle('hidden');
   },
 
-  /* ── Auth ─────────────────────────── */
+  /* ── 아이디 실시간 검증 ─────────── */
+  checkUserIDInput(input) {
+    const val    = input.value.trim();
+    const hint   = document.getElementById('regUserIDHint');
+    const result = validateUserID(val);
+    if (!val) {
+      input.className = '';
+      hint.textContent = '';
+      hint.className = 'input-hint';
+      return;
+    }
+    if (result.ok) {
+      input.className = 'input-ok';
+      hint.textContent = result.msg;
+      hint.className = 'input-hint ok';
+    } else {
+      input.className = 'input-error';
+      hint.textContent = result.msg;
+      hint.className = 'input-hint error';
+    }
+  },
+
+  /* ── 로그인 ───────────────────────── */
   async login() {
-    const email    = document.getElementById('loginEmail').value.trim();
+    const userID   = document.getElementById('loginUserID').value.trim();
     const password = document.getElementById('loginPw').value;
     const errEl    = document.getElementById('loginError');
     errEl.classList.add('hidden');
 
-    if (!email || !password) {
-      errEl.textContent = '이메일과 비밀번호를 입력하세요';
-      errEl.classList.remove('hidden');
-      return;
+    if (!userID || !password) {
+      errEl.textContent = '아이디와 비밀번호를 입력하세요';
+      errEl.classList.remove('hidden'); return;
     }
-    const btn = document.querySelector('#loginOverlay .btn-modal-primary');
+
+    const btn = document.getElementById('loginBtn');
     btn.disabled = true; btn.textContent = '로그인 중...';
 
     try {
       const data = await apiFetch('/api/auth/login', {
-        method: 'POST',
-        body: JSON.stringify({ email, password })
+        method: 'POST', body: JSON.stringify({ userID, password })
       });
       State.token = data.token;
-      State.user  = { username: data.username };
-      localStorage.setItem('fd_token', data.token);
-      localStorage.setItem('fd_user', JSON.stringify(State.user));
+      State.user  = { userID: data.userID, name: data.name };
+      localStorage.setItem('ph_token', data.token);
+      localStorage.setItem('ph_user', JSON.stringify(State.user));
       closeOverlay('login');
       syncAuthUI();
-      showToast(`환영해요, ${data.username}!`, 'success');
+      showToast(`환영해요, ${data.name}님!`, 'success');
+      // 로그인 후 입력값 초기화
+      document.getElementById('loginUserID').value = '';
+      document.getElementById('loginPw').value = '';
     } catch (e) {
       errEl.textContent = e.message;
       errEl.classList.remove('hidden');
@@ -310,35 +321,44 @@ const App = {
     }
   },
 
+  /* ── 회원가입 ─────────────────────── */
   async register() {
-    const username = document.getElementById('regUsername').value.trim();
-    const email    = document.getElementById('regEmail').value.trim();
+    const userID   = document.getElementById('regUserID').value.trim();
+    const name     = document.getElementById('regName').value.trim();
     const password = document.getElementById('regPw').value;
     const errEl    = document.getElementById('registerError');
     errEl.classList.add('hidden');
 
-    if (!username || !email || !password) {
-      errEl.textContent = '모든 항목을 입력하세요';
-      errEl.classList.remove('hidden');
-      return;
+    // 클라이언트 검증
+    const idCheck = validateUserID(userID);
+    if (!idCheck.ok) {
+      errEl.textContent = idCheck.msg || '아이디를 올바르게 입력하세요';
+      errEl.classList.remove('hidden'); return;
     }
-    if (password.length < 6) {
-      errEl.textContent = '비밀번호는 6자 이상이어야 해요';
-      errEl.classList.remove('hidden');
-      return;
+    if (!name) {
+      errEl.textContent = '이름을 입력하세요';
+      errEl.classList.remove('hidden'); return;
+    }
+    if (!password || password.length < 6) {
+      errEl.textContent = '비밀번호는 6자 이상이어야 합니다';
+      errEl.classList.remove('hidden'); return;
     }
 
-    const btn = document.querySelector('#registerOverlay .btn-modal-primary');
+    const btn = document.getElementById('registerBtn');
     btn.disabled = true; btn.textContent = '계정 만드는 중...';
 
     try {
       await apiFetch('/api/auth/register', {
-        method: 'POST',
-        body: JSON.stringify({ username, email, password })
+        method: 'POST', body: JSON.stringify({ userID, name, password })
       });
       showToast('계정이 만들어졌어요! 로그인해주세요', 'success');
       closeOverlay('register');
-      setTimeout(() => App.openModal('login'), 150);
+      // 회원가입 후 로그인창에 아이디 자동 채우기
+      setTimeout(() => {
+        App.openModal('login');
+        document.getElementById('loginUserID').value = userID;
+        document.getElementById('loginPw').focus();
+      }, 150);
     } catch (e) {
       errEl.textContent = e.message;
       errEl.classList.remove('hidden');
@@ -347,17 +367,17 @@ const App = {
     }
   },
 
+  /* ── 로그아웃 ─────────────────────── */
   logout() {
-    State.token = null;
-    State.user  = null;
-    localStorage.removeItem('fd_token');
-    localStorage.removeItem('fd_user');
+    State.token = null; State.user = null;
+    localStorage.removeItem('ph_token');
+    localStorage.removeItem('ph_user');
     document.getElementById('userMenu').classList.add('hidden');
     syncAuthUI();
     showToast('로그아웃 되었습니다');
   },
 
-  /* ── Create File ──────────────────── */
+  /* ── 파일 생성 ────────────────────── */
   togglePwField() {
     const checked = document.getElementById('createPwToggle').checked;
     document.getElementById('createPwField').classList.toggle('hidden', !checked);
@@ -365,24 +385,22 @@ const App = {
   },
 
   async createFile() {
-    const name      = document.getElementById('createName').value.trim();
-    const usePw     = document.getElementById('createPwToggle').checked;
-    const password  = usePw ? document.getElementById('createPw').value : null;
-    const errEl     = document.getElementById('createError');
+    const name     = document.getElementById('createName').value.trim();
+    const usePw    = document.getElementById('createPwToggle').checked;
+    const password = usePw ? document.getElementById('createPw').value : null;
+    const errEl    = document.getElementById('createError');
     errEl.classList.add('hidden');
 
     if (!name) {
       errEl.textContent = '파일 이름을 입력하세요';
-      errEl.classList.remove('hidden');
-      return;
+      errEl.classList.remove('hidden'); return;
     }
     if (usePw && (!password || password.length < 4)) {
-      errEl.textContent = '파일 비밀번호는 4자 이상이어야 해요';
-      errEl.classList.remove('hidden');
-      return;
+      errEl.textContent = '파일 비밀번호는 4자 이상이어야 합니다';
+      errEl.classList.remove('hidden'); return;
     }
 
-    const btn = document.querySelector('#createOverlay .btn-modal-primary');
+    const btn = document.getElementById('createBtn');
     btn.disabled = true; btn.textContent = '생성 중...';
 
     try {
@@ -390,7 +408,7 @@ const App = {
         method: 'POST',
         body: JSON.stringify({ name, password: password || undefined })
       });
-      State.files.push({ ...file, username: State.user.username });
+      State.files.push({ ...file, username: State.user.userID });
       renderFiles(State.files);
       closeOverlay('create');
       document.getElementById('createName').value = '';
@@ -406,20 +424,19 @@ const App = {
     }
   },
 
-  /* ── Verify Password ──────────────── */
+  /* ── 파일 비밀번호 확인 ─────────── */
   async verifyFile() {
     const pw    = document.getElementById('verifyPw').value;
     const errEl = document.getElementById('verifyError');
     errEl.classList.add('hidden');
-
     if (!pw) return;
-    const btn = document.querySelector('#verifyOverlay .btn-modal-primary');
+
+    const btn = document.getElementById('verifyBtn');
     btn.disabled = true; btn.textContent = '확인 중...';
 
     try {
       const data = await apiFetch(`/api/files/${State.pendingVerifyFile.id}/verify`, {
-        method: 'POST',
-        body: JSON.stringify({ password: pw })
+        method: 'POST', body: JSON.stringify({ password: pw })
       });
       if (data.ok) {
         closeOverlay('verify');
@@ -435,24 +452,20 @@ const App = {
     }
   },
 
-  /* ── File Info ────────────────────── */
+  /* ── 파일 정보 ────────────────────── */
   openInfo(file) {
     State.infoFile = file;
-    const colorIndex = file.name.charCodeAt(0) % FOLDER_COLORS.length;
-    const color = FOLDER_COLORS[colorIndex];
+    const color = FOLDER_COLORS[file.name.charCodeAt(0) % FOLDER_COLORS.length];
+    const iconEl = document.getElementById('infoFolderIcon');
+    iconEl.innerHTML = folderSVG(color);
 
-    document.getElementById('infoFolderIcon').innerHTML = folderSVG(color);
-    document.getElementById('infoFolderIcon').style.cssText = 'width:64px;height:54px;display:block';
-    document.getElementById('infoFileName').textContent = file.name;
-    document.getElementById('infoUploader').textContent = file.username || '알 수 없음';
-    document.getElementById('infoDate').textContent = formatDate(file.created_at);
+    document.getElementById('infoFileName').textContent  = file.name;
+    document.getElementById('infoUploader').textContent  = file.username || '—';
+    document.getElementById('infoDate').textContent      = formatDate(file.created_at);
     document.getElementById('infoProtected').textContent = file.is_password_protected ? '🔒 보호됨' : '공개';
 
-    // Show delete button only for own files
-    const deleteBtn = document.getElementById('infoDeleteBtn');
-    const isOwner = State.user && file.username === State.user.username;
-    deleteBtn.classList.toggle('hidden', !isOwner);
-
+    const isOwner = State.user && file.username === State.user.userID;
+    document.getElementById('infoDeleteBtn').classList.toggle('hidden', !isOwner);
     openOverlay('info');
   },
 
@@ -471,27 +484,15 @@ const App = {
   },
 };
 
-/* ─── Keyboard shortcuts ─────────────────────── */
+/* ─── Keyboard ───────────────────────────────── */
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     ['login','register','create','verify','info'].forEach(n => closeOverlay(n));
-    document.getElementById('userMenu').classList.add('hidden');
-  }
-  if (e.key === 'Enter') {
-    if (!document.getElementById('loginOverlay').classList.contains('hidden'))    App.login();
-    if (!document.getElementById('registerOverlay').classList.contains('hidden')) App.register();
-    if (!document.getElementById('createOverlay').classList.contains('hidden'))   App.createFile();
-  }
-});
-
-// Close user menu when clicking outside
-document.addEventListener('click', e => {
-  if (!e.target.closest('.avatar-wrap')) {
     document.getElementById('userMenu')?.classList.add('hidden');
   }
 });
 
-// Close modal on overlay click
+// 오버레이 바깥 클릭 시 닫기
 document.querySelectorAll('.overlay').forEach(overlay => {
   overlay.addEventListener('click', e => {
     if (e.target === overlay) {
@@ -501,16 +502,22 @@ document.querySelectorAll('.overlay').forEach(overlay => {
   });
 });
 
-/* ─── Date formatter ─────────────────────────── */
+// 유저메뉴 바깥 클릭 시 닫기
+document.addEventListener('click', e => {
+  if (!e.target.closest('.avatar-wrap')) {
+    document.getElementById('userMenu')?.classList.add('hidden');
+  }
+});
+
+/* ─── Date format ────────────────────────────── */
 function formatDate(iso) {
   if (!iso) return '—';
-  const d = new Date(iso);
-  return d.toLocaleDateString('ko-KR', { year:'numeric', month:'long', day:'numeric' });
+  return new Date(iso).toLocaleDateString('ko-KR', {
+    year: 'numeric', month: 'long', day: 'numeric'
+  });
 }
 
 /* ─── Init ───────────────────────────────────── */
 syncAuthUI();
 loadFiles();
-
-// Refresh every 30 seconds to pick up new files from others
 setInterval(loadFiles, 30000);
