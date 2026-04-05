@@ -2,6 +2,27 @@ const router = require('express').Router();
 const bcrypt = require('bcrypt');
 const jwt    = require('jsonwebtoken');
 const pool   = require('../db');
+const multer = require('multer');
+const path   = require('path');
+
+// 파일 저장 설정 (public/files/ 폴더에 저장)
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, path.join(__dirname, '../public/files'));
+  },
+  filename: (req, file, cb) => {
+    const uniqueName = Date.now() + '_' + file.originalname;
+    cb(null, uniqueName);
+  }
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 50 * 1024 * 1024 },  // 50MB 제한
+  fileFilter: (req, file, cb) => {
+    cb(null, true);  // 모든 형식 허용
+  }
+});
 
 /* ── JWT 인증 미들웨어 ── */
 function auth(req, res, next) {
@@ -32,18 +53,20 @@ router.get('/', async (req, res) => {
 });
 
 /* ── POST /api/files  (파일 생성) ── */
-router.post('/', auth, async (req, res) => {
+router.post('/', auth, upload.single('file'), async (req, res) => {
   const { name, password } = req.body;
   if (!name) return res.status(400).json({ error: '파일 이름을 입력하세요' });
+  if (!req.file) return res.status(400).json({ error: '파일을 선택하세요' });
 
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
 
+    const filePath = `/files/${req.file.filename}`;
     const [result] = await conn.query(
       `INSERT INTO files (userID, name, file_path, is_password_protected)
        VALUES (?, ?, ?, ?)`,
-      [req.user.userID, name, `/files/${Date.now()}_${name}`, !!password]
+      [req.user.userID, name, filePath, !!password]
     );
     const fileId = result.insertId;
 

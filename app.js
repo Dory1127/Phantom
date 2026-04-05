@@ -385,42 +385,37 @@ const App = {
   },
 
   async createFile() {
-    const name     = document.getElementById('createName').value.trim();
-    const usePw    = document.getElementById('createPwToggle').checked;
-    const password = usePw ? document.getElementById('createPw').value : null;
-    const errEl    = document.getElementById('createError');
-    errEl.classList.add('hidden');
+    const name = document.getElementById('createName').value;
+    const password = document.getElementById('createPw').value;
+    const fileInput = document.getElementById('createFile');
+    const file = fileInput.files[0];
 
-    if (!name) {
-      errEl.textContent = '파일 이름을 입력하세요';
-      errEl.classList.remove('hidden'); return;
-    }
-    if (usePw && (!password || password.length < 4)) {
-      errEl.textContent = '파일 비밀번호는 4자 이상이어야 합니다';
-      errEl.classList.remove('hidden'); return;
+    if (!name || !file) {
+      showToast('이름과 파일을 입력하세요', 'error');
+      return;
     }
 
-    const btn = document.getElementById('createBtn');
-    btn.disabled = true; btn.textContent = '생성 중...';
+    const formData = new FormData();
+    formData.append('name', name);
+    formData.append('password', password || '');
+    formData.append('file', file);
 
     try {
-      const file = await apiFetch('/api/files', {
+      const res = await fetch(API + '/api/files', {
         method: 'POST',
-        body: JSON.stringify({ name, password: password || undefined })
+        headers: { 'Authorization': `Bearer ${State.token}` },
+        body: formData
       });
-      State.files.push({ ...file, username: State.user.userID });
-      renderFiles(State.files);
-      closeOverlay('create');
-      document.getElementById('createName').value = '';
-      document.getElementById('createPwToggle').checked = false;
-      document.getElementById('createPw').value = '';
-      document.getElementById('createPwField').classList.add('hidden');
-      showToast(`"${name}" 파일이 생성됐어요`, 'success');
+      const data = await res.json();
+      if (res.ok) {
+        showToast('파일 업로드 성공');
+        loadFiles();
+        closeOverlay('create');
+      } else {
+        showToast(data.error, 'error');
+      }
     } catch (e) {
-      errEl.textContent = e.message;
-      errEl.classList.remove('hidden');
-    } finally {
-      btn.disabled = false; btn.textContent = '파일 생성';
+      showToast('업로드 실패', 'error');
     }
   },
 

@@ -189,6 +189,10 @@
       <h2 class="modal-title">새 파일 만들기</h2>
       <p class="modal-sub">파일 이름과 보안 설정을 입력하세요</p>
       <div class="field">
+        <label>파일 선택</label>
+        <input type="file" id="createFile" accept="*" />
+      </div>
+      <div class="field">
         <label>파일 이름</label>
         <input type="text" id="createName" placeholder="내 소중한 파일"
                onkeydown="if(event.key==='Enter') App.createFile()" />
