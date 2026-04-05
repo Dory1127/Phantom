@@ -37,13 +37,6 @@
         <button class="btn-primary"  onclick="App.openModal('register')">회원가입</button>
       </div>
       <div class="user-actions hidden" id="userActions">
-        <button class="btn-new" onclick="App.openModal('create')">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <line x1="7" y1="1" x2="7" y2="13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            <line x1="1" y1="7" x2="13" y2="7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-          </svg>
-          새 파일
-        </button>
         <div class="avatar-wrap" onclick="App.toggleUserMenu()">
           <div class="avatar" id="userAvatar"></div>
           <div class="user-menu hidden" id="userMenu">
@@ -73,7 +66,28 @@
     </div>
   </main>
 
+  <button class="fab-new hidden" id="fabNew" onclick="App.openCreateChoice()">+</button>
   <div class="toast hidden" id="toast"></div>
+
+  <!-- 생성 선택 모달 -->
+  <div class="overlay hidden" id="createChoiceOverlay">
+    <div class="modal modal-sm">
+      <button class="modal-x" onclick="App.closeModal('createChoice')">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <line x1="2" y1="2" x2="14" y2="14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <line x1="14" y1="2" x2="2" y2="14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <h2 class="modal-title">무엇을 만들까요?</h2>
+      <p class="modal-sub">새 항목을 선택하고 보안 설정을 추가하세요</p>
+      <div class="field">
+        <button class="btn-modal-primary" onclick="App.startCreate('file')">파일 생성</button>
+      </div>
+      <div class="field">
+        <button class="btn-modal-primary" onclick="App.startCreate('folder')">폴더 생성</button>
+      </div>
+    </div>
+  </div>
 
   <!-- ════════════════ MODALS ════════════════ -->
 
@@ -186,14 +200,14 @@
           <line x1="14" y1="2" x2="2" y2="14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
         </svg>
       </button>
-      <h2 class="modal-title">새 파일 만들기</h2>
-      <p class="modal-sub">파일 이름과 보안 설정을 입력하세요</p>
-      <div class="field">
+      <h2 class="modal-title" id="createTitle">새 파일 만들기</h2>
+      <p class="modal-sub" id="createSub">파일 이름과 보안 설정을 입력하세요</p>
+      <div class="field" id="createFileField">
         <label>파일 선택</label>
         <input type="file" id="createFile" accept="*" />
       </div>
       <div class="field">
-        <label>파일 이름</label>
+        <label id="createNameLabel">파일 이름</label>
         <input type="text" id="createName" placeholder="내 소중한 파일"
                onkeydown="if(event.key==='Enter') App.createFile()" />
       </div>
