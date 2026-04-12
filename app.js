@@ -44,6 +44,7 @@ const State = {
   token:  localStorage.getItem('ph_token') || null,
   user:   JSON.parse(localStorage.getItem('ph_user') || 'null'),
   files:  [],
+  search: '',
   dragging: null, dragOffX: 0, dragOffY: 0,
   pendingVerifyFile: null,
   infoFile: null,
@@ -88,6 +89,15 @@ function clearModalErrors() {
 function updateCounter(n) {
   document.getElementById('fileCounter').textContent =
     n === 0 ? '— files floating' : `${n} file${n === 1 ? '' : 's'} floating`;
+}
+
+function getFilteredFiles() {
+  const query = State.search.trim().toLowerCase();
+  if (!query) return State.files;
+  return State.files.filter(file =>
+    file.name.toLowerCase().includes(query) ||
+    (file.username || '').toLowerCase().includes(query)
+  );
 }
 
 /* ─── Auth UI sync ───────────────────────────── */
@@ -235,7 +245,7 @@ function esc(s) {
 async function loadFiles() {
   try {
     State.files = await apiFetch('/api/files');
-    renderFiles(State.files);
+    renderFiles(getFilteredFiles());
   } catch (e) {
     showToast('파일 로드 실패', 'error');
   }
@@ -486,7 +496,7 @@ const App = {
       if (!res.ok) throw new Error(data.error || '생성 실패');
 
       State.files.push({ ...data, username: State.user.userID });
-      renderFiles(State.files);
+      renderFiles(getFilteredFiles());
       closeOverlay('create');
       document.getElementById('createName').value = '';
       document.getElementById('createPwToggle').checked = false;
@@ -553,14 +563,22 @@ const App = {
     try {
       await apiFetch(`/api/files/${State.infoFile.id}`, { method: 'DELETE' });
       State.files = State.files.filter(f => f.id !== State.infoFile.id);
-      renderFiles(State.files);
+      renderFiles(getFilteredFiles());
       closeOverlay('info');
       showToast('파일이 삭제됐어요');
     } catch (e) {
       showToast(e.message, 'error');
     }
   },
-};
+  onSearchChange(value) {
+    State.search = value;
+    renderFiles(getFilteredFiles());
+  },
+
+  openFile() {
+    if (!State.infoFile || !State.infoFile.file_path) return;
+    window.open(API + State.infoFile.file_path, '_blank');
+  },};
 
 /* ─── Keyboard ───────────────────────────────── */
 document.addEventListener('keydown', e => {

@@ -69,6 +69,21 @@ html, body {
 .file-counter { font-size: 12px; color: var(--text3); letter-spacing: 0.08em; font-weight: 300; }
 .header-right  { display: flex; align-items: center; gap: 10px; }
 
+.search-wrap {
+  position: relative; width: 100%; max-width: 320px;
+}
+.search-wrap input {
+  width: 100%; background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 999px; color: var(--text); padding: 9px 16px;
+  font-size: 13px; outline: none; transition: border-color 0.2s;
+}
+.search-wrap input:focus {
+  border-color: var(--accent);
+}
+.search-wrap input::placeholder {
+  color: var(--text3);
+}
+
 .btn-ghost {
   background: transparent; border: 1px solid var(--border2);
   color: var(--text2); font-size: 13px; font-family: 'DM Sans', sans-serif;

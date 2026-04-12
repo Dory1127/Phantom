@@ -1,0 +1,18 @@
+DB 작업
+- 데이터베이스 테이블 설계 및 생성
+  - users(userID, name, password_hash, created_at)
+  - files(id, userID, name, file_path, is_password_protected, pos_x, pos_y, created_at)
+  - file_passwords(file_id, password_hash)
+- DB 연결 설정 검증
+  - env에서 DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME 확인
+  - `JWT_SECRET` 환경 변수 설정
+- 경로 및 모듈 수정
+  - `auth.js`와 `Files.js`의 `require('../db')` 경로 수정
+  - `server_index.js`에서 실제 라우트 파일 위치 확인/수정
+- 권한 및 보안 처리
+  - 파일 소유자만 위치 업데이트 및 삭제 가능하도록 확인
+  - 비밀번호 보호된 파일 접근 검증 강화
+- 파일 삭제 시 디스크에서 실제 파일 삭제 구현
+- 트랜잭션/에러 처리 개선
+  - 파일 업로드 중 오류 시 롤백 확인
+  - 비동기 DB 에러 로깅 정제

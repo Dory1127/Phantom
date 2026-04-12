@@ -28,6 +28,10 @@
     </div>
 
     <div class="header-center">
+      <div class="search-wrap">
+        <input id="globalSearch" type="search" placeholder="파일 이름 또는 업로더로 검색"
+               oninput="App.onSearchChange(this.value)" />
+      </div>
       <span class="file-counter" id="fileCounter">— files floating</span>
     </div>
 
@@ -275,6 +279,7 @@
         <div class="info-row"><span>생성일</span><span id="infoDate"></span></div>
         <div class="info-row"><span>보호 여부</span><span id="infoProtected"></span></div>
       </div>
+      <button class="btn-modal-primary" id="infoOpenBtn" onclick="App.openFile()">열기</button>
       <button class="btn-delete hidden" id="infoDeleteBtn" onclick="App.deleteFileFromInfo()">삭제</button>
     </div>
   </div>

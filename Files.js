@@ -1,7 +1,7 @@
 const router = require('express').Router();
 const bcrypt = require('bcrypt');
 const jwt    = require('jsonwebtoken');
-const pool   = require('../db');
+const pool   = require('./db');
 const multer = require('multer');
 const path   = require('path');
 
@@ -41,7 +41,7 @@ router.get('/', async (req, res) => {
   try {
     const [rows] = await pool.query(
       `SELECT f.id, f.name, f.pos_x, f.pos_y, f.is_password_protected,
-              f.created_at, f.userID as username
+              f.created_at, f.userID as username, f.file_path
        FROM files f
        ORDER BY f.created_at DESC`
     );
