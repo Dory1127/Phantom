@@ -1,10 +1,11 @@
 # 외부 무료 MySQL DB 설정 안내
 
-## 1. PlanetScale 추천
-1. https://planetscale.com/ 에 가입하세요.
-2. 무료 프랜으로 새 데이터베이스를 만드세요.
-3. `Connect`에서 `MySQL`을 선택하고 연결 정보를 확인하세요.
-4. `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` 값을 가져옵니다.
+## 1. Railway MySQL 추천
+1. https://railway.app/ 에 가입하세요.
+2. 새 프로젝트를 생성합니다.
+3. `MySQL` 플러그인을 추가하세요.
+4. 제공된 연결 정보를 확인합니다.
+5. `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` 값을 가져옵니다.
 
 ## 2. `.env` 파일 생성
 아래 내용을 `.env`로 저장하세요.
@@ -21,7 +22,7 @@ JWT_SECRET=your-secure-jwt-secret
 ## 3. 데이터베이스 스키마 적용
 `schema.sql` 파일을 외부 DB에 실행하세요.
 
-- PlanetScale 콘솔의 `SQL Editor`를 사용하거나
+- Railway 콘솔의 `SQL Editor`를 사용하거나
 - 터미널에서 `mysql` 클라이언트를 사용하세요.
 
 ## 4. 앱 실행
@@ -32,7 +33,8 @@ JWT_SECRET=your-secure-jwt-secret
    - `npm run dev` 또는 `npm start`
 
 ## 5. 내가 해야 할 일
-- PlanetScale에 가입하고 데이터베이스를 만드세요.
+- Railway에 가입하고 새 프로젝트를 만드세요.
+- MySQL 플러그인을 활성화하세요.
 - 연결 정보를 `.env`에 입력하세요.
 - `schema.sql`을 실행해서 테이블을 만드세요.
 - `JWT_SECRET`는 임의의 문자열로 설정하세요.
